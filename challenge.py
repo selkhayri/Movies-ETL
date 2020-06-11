@@ -130,6 +130,18 @@ def parse_dollars(s):
     else:
         return np.nan
 
+
+def fill_missing_kaggle_data(df, kaggle_column, wiki_column):
+    df[kaggle_column] = df.apply(
+        lambda row: row[wiki_column] if row[kaggle_column] == 0 else row[kaggle_column]
+        , axis=1)
+    df.drop(columns=wiki_column, inplace=True)
+
+
+def load_data(df):
+    return None
+
+
 #-------------------------------------------------
 
 def Pipeline(wiki_movies_raw,kaggle_metadata,ratings_data):
@@ -214,7 +226,6 @@ def Pipeline(wiki_movies_raw,kaggle_metadata,ratings_data):
                                                 f'{re_date_form_4})')[0],\
                                                infer_datetime_format=True)
      
-    # print(wiki_movies_df['release_date'])
     
     # Handle the Running time column
     # ------------------------------
@@ -267,6 +278,7 @@ def Pipeline(wiki_movies_raw,kaggle_metadata,ratings_data):
     # Convert the video column to boolean
     kaggle_metadata['video'] = kaggle_metadata['video'] == 'True'
     
+ 
     # Handle the budget column
     # -----------------------
     
@@ -302,25 +314,20 @@ def Pipeline(wiki_movies_raw,kaggle_metadata,ratings_data):
     ###########
     
     nulls_wiki = wiki_movies_df.loc[(wiki_movies_df["title"] == '') | (wiki_movies_df["title"].isnull())]
-    print("NULLS_WIKI ***************************************************")
-    print(nulls_wiki)
-    
+
     # Join the kaggle_metadata and wiki_movies_df dataframes on imdb_id. To
     # distinguish between similarly named columns from the two tables, attach
     # the suffice "_wiki" to the columns from the wiki_movies_df dataframe 
     # and "_kaggle" to the columns from the kaggle_metadata dataframe
     movies_df = pd.merge(wiki_movies_df, kaggle_metadata, on='imdb_id', suffixes=['_wiki','_kaggle'])    
-    
-    
+      
     # Handle the title_kaggle and title_wiki columns. 
     # ---------------------------------------------------
     
     # Determine the null values and empty title values that exist in the
     # title_kaggle column and the title_wiki column
     nulls_kaggle = movies_df.loc[(movies_df["title_kaggle"] == '') | (movies_df["title_kaggle"].isnull())]
-    len_nulls_kaggle = len(nulls_kaggle)
     nulls_wiki = movies_df.loc[(movies_df["title_wiki"] == '') | (movies_df["title_wiki"].isnull())]
-    len_nulls_wiki = len(nulls_wiki)
     
     # Cross pollinate the values in the two columns, filling the empty or null
     # values in one column with the values in the other
@@ -330,22 +337,128 @@ def Pipeline(wiki_movies_raw,kaggle_metadata,ratings_data):
     # drop the title_wiki column
     movies_df.drop(columns=["title_wiki"])
 
-    # Rename the title_kaggle column to title
-    movies_df.rename(columns={"title_kaggle":"title"},inplace=True)
-    
     # Delete any rows with no title
-    null_titles = movies_df.loc[(movies_df["title"] == '') | (movies_df["title"].isnull())]
+    null_titles = movies_df.loc[(movies_df["title_kaggle"] == '') | (movies_df["title_kaggle"].isnull())]
     movies_df.drop(null_titles.index,axis=0)
 
     # Handle the running_time and runtime columns
     # -------------------------------------------
     
-    # Keep the kaggle and fill in zeroes with Wikipedia data
-    zeroes_kaggle = movies_df.loc[movies_df.runtime == 0]
-    movies_df.loc[zeroes_kaggle.index,"runtime"] = movies_df.loc[zeroes_kaggle.index,"running_time"]
+    # Fill the missing values in the kaggle column, runtime, with zeroes
+    movies_df.runtime.fillna(0, inplace=True)
+    
+    # Get the rows where budget_kaggle is 0
+    zeroes_runtime_kaggle = movies_df.loc[movies_df.runtime == 0]
+    
+     # Fill in the zeroes with the values from Wikipedia data
+    movies_df.loc[zeroes_runtime_kaggle.index,"runtime"] = movies_df.loc[zeroes_runtime_kaggle.index,"running_time"]
     
     # Drop the wikipedia column, running_time
-    movies_df.drop(["running_time"],axis=1)
+    movies_df.drop("running_time",axis=1,inplace=True)
+    
+    # Handle the budget_kaggle and budget_wiki columns
+    # ------------------------------------------------
+    
+    # Fill the missing values in the kaggle column, runtime, with zeroes
+    movies_df.budget_kaggle.fillna(0, inplace=True)
+    
+    # Get the rows where budget_kaggle is 0
+    zeroes_budget_kaggle = movies_df.loc[movies_df.budget_kaggle == 0]
+    
+    # Fill in the zeroes with the values from Wikipedia data
+    movies_df.loc[zeroes_budget_kaggle.index,"budget_kaggle"] = movies_df.loc[zeroes_budget_kaggle.index,"budget_wiki"]
+    
+    # Drop the wikipedia column, budget_wiki
+    movies_df.drop("budget_wiki",axis=1,inplace=True)
+    
+    # Handle the box_office and revenue columns
+    # -----------------------------------------
+    
+    # Fill the missing values in the kaggle column, box_office, with zeroes
+    movies_df.revenue.fillna(0, inplace=True)
+    
+    # Get the rows where box_office is 0
+    zeroes_revenue = movies_df.loc[movies_df.revenue == 0]
+    
+    # Fill in the zeroes with the values from Wikipedia data
+    movies_df.loc[zeroes_revenue.index,"revenue"] = movies_df.loc[zeroes_revenue.index,"box_office"]
+    
+    # Drop the wikipedia column, budget_wiki
+    movies_df.drop("box_office",axis=1,inplace=True)
+    
+    
+    # Handle release_date_kaggle and release_date_wiki
+    # ------------------------------------------------
+    
+    
+    
+    # Handle Language - Drop Wikipedia
+    # --------------------------------
+    movies_df.drop("Language",axis=1,inplace=True)
+    
+    # Handle Production Companies - Drop Wikipedia
+    # --------------------------------------------
+    movies_df.drop("Production company(s)",axis=1,inplace=True)
+    
+    # Reorder the columns (and remove the 'video' column which contains only 
+    # one value)
+    # --------------------
+    new_order = ['imdb_id','id','title_kaggle','original_title','tagline','belongs_to_collection','url','imdb_link',
+                       'runtime','budget_kaggle','revenue','release_date_kaggle','popularity','vote_average','vote_count',
+                       'genres','original_language','overview','spoken_languages','Country',
+                       'production_companies','production_countries','Distributor',
+                       'Producer(s)','Director','Starring','Cinematography','Editor(s)','Writer(s)','Composer(s)','Based on'
+                      ]
+    
+    movies_df = movies_df[new_order]
+     
+     
+   # Rename the columns
+    # ------------------
+    movies_df.rename({'id':'kaggle_id',
+        'title_kaggle':'title',
+        'url':'wikipedia_url',
+        'budget_kaggle':'budget',
+        'release_date_kaggle':'release_date',
+        'Country':'country',
+        'Distributor':'distributor',
+        'Producer(s)':'producers',
+        'Director':'director',
+        'Starring':'starring',
+        'Cinematography':'cinematography',
+        'Editor(s)':'editors',
+        'Writer(s)':'writers',
+        'Composer(s)':'composers',
+        'Based on':'based_on'
+        }, axis='columns', inplace=True)
+    
+    
+    # Transform and merge rating data
+    # -------------------------------
+    
+    # Group ratings by movieId and rating
+    rating_counts = ratings.groupby(['movieId','rating'], as_index=False).count()
+    
+    # Rename the 'userId' column to 'count'
+    rating_counts = rating_counts.rename({'userId':'count'},axis=1)
+    
+    # Create a pivot-table with movieId down the left, rating on top, and count
+    # as the values in the table
+    rating_counts = rating_counts.pivot(index='movieId',columns='rating', values='count')
+    
+    # Prepend the prefix, 'rating_', to the column names
+    rating_counts.columns = ['rating_' + str(col) for col in rating_counts.columns]
+    
+    # Merge the movies_df dataframe with the rating_counts dataframe
+    movies_with_ratings_df = pd.merge(movies_df, rating_counts, left_on='kaggle_id', right_index=True, how='left')
+    
+    # Fill missing ratings with 0
+    movies_with_ratings_df[rating_counts.columns] = movies_with_ratings_df[rating_counts.columns].fillna(0)
+    
+    # Save data into DB
+    # -----------------
+    
+    # load_data(movies_with_ratings_df)
     
     return None
 
