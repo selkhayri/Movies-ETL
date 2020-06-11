@@ -132,9 +132,15 @@ def parse_dollars(s):
 
 #-------------------------------------------------
 
-def Pipeline(wiki_movies_raw,kaggle_data,ratings_data):
+def Pipeline(wiki_movies_raw,kaggle_metadata,ratings_data):
     # Convert the wiki_movies json data to a dataframe
     #wiki_movies_df = pd.DataFrame(wiki_movies_raw)
+
+    ############
+    #
+    # Wikipedia data
+    #
+    ############
 
     # Get list of movie json objects which satisfy the following conditions:
     # - one of the keys, Director or 'Directed by,' is present
@@ -227,7 +233,119 @@ def Pipeline(wiki_movies_raw,kaggle_data,ratings_data):
     # Drop the Running time column
     wiki_movies_df.drop('Running time', axis=1, inplace=True)
     
-    print(wiki_movies_df['running_time'])
+    ############
+    #
+    # Movies Kaggle data
+    #
+    ############
+    
+    # Handle the adult column
+    # -----------------------
+    
+    # Filter out the rows where the value of the adult column is something
+    # other than 'True' or 'False.'
+    kaggle_metadata = kaggle_metadata[kaggle_metadata.adult.isin(['True','False'])]
+    
+    # Remove adult movies from the data set
+    kaggle_metadata = kaggle_metadata[kaggle_metadata['adult'] == 'False']
+    
+    # Drop the adult column
+    kaggle_metadata = kaggle_metadata.drop("adult",axis=1)
+
+    
+    # Handle the video column
+    # -----------------------
+    
+    # Check the values in the video column
+    distinct_values = kaggle_metadata["video"].unique()
+    
+    # Filter out the rows where the value of the video column is something
+    # other than the boolean values of True and False.
+    if len(distinct_values) > 2:
+       kaggle_metadata = kaggle_metadata[kaggle_metadata.video.isin([True,False])]     
+        
+    # Convert the video column to boolean
+    kaggle_metadata['video'] = kaggle_metadata['video'] == 'True'
+    
+    # Handle the budget column
+    # -----------------------
+    
+    # Convert the budget column to integer
+    kaggle_metadata['budget'] = kaggle_metadata['budget'].astype(int)
+    
+    # Handle the id and popularity columns
+    # -------------------------------------
+    
+    # Convert the id and popularity columns to integer
+    kaggle_metadata['id'] = pd.to_numeric(kaggle_metadata['id'], errors='raise')
+    kaggle_metadata['popularity'] = pd.to_numeric(kaggle_metadata['popularity'], errors='raise')
+    
+    # Handle the release_date column
+    # -----------------------
+    
+    # Convert the  release_date column to datetime 
+    kaggle_metadata['release_date'] = pd.to_datetime(kaggle_metadata['release_date'])
+    
+    ##########
+    #
+    # Ratings data
+    #
+    ##########
+    
+    # Convert the timestamp column to datetime
+    ratings_data['timestamp'] = pd.to_datetime(ratings_data['timestamp'], unit='s')
+    
+    ##########
+    #
+    # Further processing
+    #
+    ###########
+    
+    nulls_wiki = wiki_movies_df.loc[(wiki_movies_df["title"] == '') | (wiki_movies_df["title"].isnull())]
+    print("NULLS_WIKI ***************************************************")
+    print(nulls_wiki)
+    
+    # Join the kaggle_metadata and wiki_movies_df dataframes on imdb_id. To
+    # distinguish between similarly named columns from the two tables, attach
+    # the suffice "_wiki" to the columns from the wiki_movies_df dataframe 
+    # and "_kaggle" to the columns from the kaggle_metadata dataframe
+    movies_df = pd.merge(wiki_movies_df, kaggle_metadata, on='imdb_id', suffixes=['_wiki','_kaggle'])    
+    
+    
+    # Handle the title_kaggle and title_wiki columns. 
+    # ---------------------------------------------------
+    
+    # Determine the null values and empty title values that exist in the
+    # title_kaggle column and the title_wiki column
+    nulls_kaggle = movies_df.loc[(movies_df["title_kaggle"] == '') | (movies_df["title_kaggle"].isnull())]
+    len_nulls_kaggle = len(nulls_kaggle)
+    nulls_wiki = movies_df.loc[(movies_df["title_wiki"] == '') | (movies_df["title_wiki"].isnull())]
+    len_nulls_wiki = len(nulls_wiki)
+    
+    # Cross pollinate the values in the two columns, filling the empty or null
+    # values in one column with the values in the other
+    movies_df.loc[nulls_wiki.index,"title_wiki"] = movies_df.loc[nulls_wiki.index,"title_kaggle"]
+    movies_df.loc[nulls_kaggle.index,"title_kaggle"] = movies_df.loc[nulls_kaggle.index,"title_wiki"]
+        
+    # drop the title_wiki column
+    movies_df.drop(columns=["title_wiki"])
+
+    # Rename the title_kaggle column to title
+    movies_df.rename(columns={"title_kaggle":"title"},inplace=True)
+    
+    # Delete any rows with no title
+    null_titles = movies_df.loc[(movies_df["title"] == '') | (movies_df["title"].isnull())]
+    movies_df.drop(null_titles.index,axis=0)
+
+    # Handle the running_time and runtime columns
+    # -------------------------------------------
+    
+    # Keep the kaggle and fill in zeroes with Wikipedia data
+    zeroes_kaggle = movies_df.loc[movies_df.runtime == 0]
+    movies_df.loc[zeroes_kaggle.index,"runtime"] = movies_df.loc[zeroes_kaggle.index,"running_time"]
+    
+    # Drop the wikipedia column, running_time
+    movies_df.drop(["running_time"],axis=1)
     
     return None
 
