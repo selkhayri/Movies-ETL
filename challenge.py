@@ -6,6 +6,9 @@ import json
 import pandas as pd
 import numpy as np
 import re
+import psycopg2 as psql
+import time
+from sqlalchemy import create_engine
 
 # Load data directory from local config 
 from local_config import data_dir
@@ -20,6 +23,11 @@ from local_config import re_date_form_1
 from local_config import re_date_form_2
 from local_config import re_date_form_3
 from local_config import re_date_form_4
+
+# Load the database particulars
+from config import db_user
+from config import db_password
+from local_config import db_server
 
 def clean_movie(movie):
     
@@ -84,14 +92,12 @@ def clean_movie(movie):
     return movie
 
 #-------------------------------------------------
-
 def parse_dollars(s):
     # if s is not a string, return NaN
     if type(s) != str:
         return np.nan
 
     # if input is of the form $###.# million
-    #if re.match(r'\$\s*\d+\.?\d*\s*milli?on', s, flags=re.IGNORECASE):
     if re.match(re_dollar_amount_1, s, flags=re.IGNORECASE):
         # remove dollar sign and " million"
         s = re.sub('\$|\s|[a-zA-Z]','', s)
@@ -103,7 +109,6 @@ def parse_dollars(s):
         return value
 
     # if input is of the form $###.# billion
-    # elif re.match(r'\$\s*\d+\.?\d*\s*billi?on', s, flags=re.IGNORECASE):
     elif re.match(re_dollar_amount_2, s, flags=re.IGNORECASE):
         # remove dollar sign and " billion"
         s = re.sub('\$|\s|[a-zA-Z]','', s)
@@ -131,14 +136,107 @@ def parse_dollars(s):
         return np.nan
 
 
-def fill_missing_kaggle_data(df, kaggle_column, wiki_column):
-    df[kaggle_column] = df.apply(
-        lambda row: row[wiki_column] if row[kaggle_column] == 0 else row[kaggle_column]
-        , axis=1)
-    df.drop(columns=wiki_column, inplace=True)
 
+def get_table_columns(table_name):
+    conn = psql.connect(f"postgres://{db_user}:{db_password}@" + db_server)
+    cur = conn.cursor()
+    
+    # find columns in existing table
+    sql = f"SELECT * FROM {table_name};"
+    
+    cur.execute(sql)
+    
+    movie_cols = [desc[0] for desc in cur.description]
+    
+    cur.close()
+    conn.close()
+    
+    return movie_cols
 
-def load_data(df):
+def delete_from_table(table_name):
+    conn = psql.connect(f"postgres://{db_user}:{db_password}@" + db_server)
+    cur = conn.cursor()
+    
+    # find columns in existing table
+    
+    sql = f"DELETE FROM {table_name};"
+    cur.execute(sql)
+    
+    cur.close()
+    conn.close()
+
+def remove_cols(table_name, cols):
+    conn = psql.connect(f"postgres://{db_user}:{db_password}@" + db_server)
+    cur = conn.cursor()
+    
+    # find columns in existing table
+    
+    for col in cols:
+        sql = f"ALTER TABLE {table_name} DROP COLUMN IF EXISTS {col};"
+        cur.execute(sql)
+    
+    cur.close()
+    conn.close()
+
+def add_cols(table_name, cols):
+    conn = psql.connect(f"postgres://{db_user}:{db_password}@" + db_server)
+    cur = conn.cursor()
+    
+    # find columns in existing table
+    
+    for col in cols:
+        sql = f"ALTER TABLE {table_name} ADD COLUMN {col} varchar(30);"
+        cur.execute(sql)
+    
+    cur.close()
+    conn.close()
+
+def load_ratings_data():   
+    engine = create_engine(f"postgres://{db_user}:{db_password}@" + db_server)
+    
+    rows_imported = 0
+    # get the start_time from time.time()
+    
+    start_time = time.time()
+    for data in pd.read_csv(f'{data_dir}ratings.csv', chunksize=1000000):
+        print(f'importing rows {rows_imported} to {rows_imported + len(data)}...', end='')
+        data.to_sql(name='ratings', con=engine, if_exists='append')
+        rows_imported += len(data)
+    
+        # add elapsed time to final print out
+        print(f'Done. {time.time() - start_time} total seconds elapsed')
+
+def insert_data(table_name,df):
+    engine = create_engine(f"postgres://{db_user}:{db_password}@" + db_server)
+
+    df.to_sql(name=table_name, con=engine, if_exists="append")
+    
+def load_movies_data(df):
+    
+    delete_from_table("movies")
+    
+    movie_cols = get_table_columns("movies")
+    df_cols = df.columns
+    
+    to_remove = []
+    for col in movie_cols:
+        if col != "index" and not col in df_cols:
+            to_remove.append(col)
+            
+    to_add = []
+    for col in df_cols:
+        if col not in movie_cols:
+            to_add.append(col)
+    
+    
+    if len(to_remove) > 0:    
+        remove_cols("movies", to_remove)
+    
+    if len(to_add) > 0:
+        add_cols("movies", to_add)
+        
+    insert_data("movies",df)
+    
     return None
 
 
@@ -458,7 +556,8 @@ def Pipeline(wiki_movies_raw,kaggle_metadata,ratings_data):
     # Save data into DB
     # -----------------
     
-    # load_data(movies_with_ratings_df)
+    load_movies_data(movies_df)
+    load_ratings_data()
     
     return None
 

@@ -9,3 +9,4 @@ re_date_form_2 = r'\d{4}.[01]\d.[123]\d'
 re_date_form_3 = r'(?:January|February|March|April|May|June|July|August|September|October|November|December)\s\d{4}'
 re_date_form_4 = r'\d{4}'
 
+db_server = "127.0.0.1:5432/movie_data"
