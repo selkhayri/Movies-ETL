@@ -7,10 +7,18 @@ import pandas as pd
 import numpy as np
 import re
 import psycopg2 as psql
+from psycopg2 import OperationalError, errorcodes, errors
 from sqlalchemy import create_engine
+import time
+import logging
+import logging.handlers
+import sys
 
 # Load data directory from local config 
 from local_config import data_dir
+
+# Load the log director from local config
+from local_config import log_dir
 
 # Load dollar amount regexps from local config
 from local_config import re_dollar_amount_1
@@ -28,6 +36,40 @@ from config import db_user
 from config import db_password
 from local_config import db_server
 
+# Set up a specific logger with our desired output level
+my_logger = logging.getLogger('MyLogger')
+my_logger.setLevel(logging.INFO)
+
+# Add the log message handler to the logger
+LOG_FILENAME =  log_dir + 'log.dat'
+handler = logging.handlers.RotatingFileHandler(
+              LOG_FILENAME, maxBytes=20, backupCount=5)
+my_logger.addHandler(handler)
+
+# print_psycopg2_exception
+# Based on print_psycopg2_exception
+# Retrieved from:
+# https://kb.objectrocket.com/postgresql/python-error-handling-with-the-psycopg2-postgresql-adapter-645
+# This function handles and parses psycopg2 exceptions
+# 
+def log_psycopg2_exception(err):
+    # get details about the exception
+    err_type, err_obj, traceback = sys.exc_info()
+
+    # get the line number when exception occured
+    line_num = traceback.tb_lineno
+    my_logger.error("\npsycopg2 ERROR:", err, "on line number:", line_num)
+    
+    # Log the error traceback and error type
+    my_logger.error("psycopg2 traceback:", traceback, "-- type:", err_type)
+
+    # Log extensions.Diagnostics object attribute
+    my_logger.error ("\nextensions.Diagnostics:", err.diag)
+
+    # Log the pgcode and pgerror exceptions
+    my_logger.error ("pgerror:", err.pgerror)
+    my_logger.error ("pgcode:", err.pgcode, "\n")
+
 # clean_movie
 # ===========
 # This function consolidates all the alternate titles keys into a single
@@ -42,7 +84,11 @@ from local_config import db_server
 
 def clean_movie(movie):
     
-    # Phase I
+    # Check parameter types
+    if type(movie) != dict:
+        raise ValueError("Invalid movie object: Expected dict")
+        
+    # Phase I    
     movie = dict(movie)  # create a non-destructive copy
     alt_titles = {}
     
@@ -73,6 +119,14 @@ def clean_movie(movie):
     # new_name - new key name
     
     def change_column_name(old_name, new_name):
+        
+        # Check parameter types
+        if type(old_name) != str:
+            raise ValueError("Invalid old_name: Expected <str>")
+            
+        if type(new_name) != str:
+            raise ValueError("Invalid new_name: Expected <str>")
+        
         # If the key old_name exists in the movie dict
         if old_name in movie:
             
@@ -171,10 +225,14 @@ def parse_dollars(s):
 
 def get_table_columns(table_name):
     
+    # Check parameter types
+    if type(table_name) != str:
+        raise ValueError("Invalid table_name: Expected <str>")
+    
     # Get a database connection
     conn = psql.connect(f"postgres://{db_user}:{db_password}@" + db_server)
     cur = conn.cursor()
-    
+   
     # find columns of table table_name
     sql = f"SELECT * FROM {table_name};" 
     cur.execute(sql)
@@ -199,7 +257,11 @@ def get_table_columns(table_name):
 # - table_name - string - the name of the table whose contents are to be cleared
 
 def delete_from_table(table_name):
-    
+
+    # Check parameter types
+    if type(table_name) != str:
+        raise ValueError("Invalid table_name: Expected <str>")
+        
     # Get a database connection
     conn = psql.connect(f"postgres://{db_user}:{db_password}@" + db_server)
     cur = conn.cursor()
@@ -224,12 +286,22 @@ def delete_from_table(table_name):
 
 def remove_cols(table_name, cols):
     
+    # Check parameter types
+    if type(table_name) != str:
+        raise ValueError("Invalid table_name: Expected <str>")
+    
+    if type(cols) != list:
+        raise ValueError("Invalid cols: Expected <list>")
+    
     # Get a database connection
     conn = psql.connect(f"postgres://{db_user}:{db_password}@" + db_server)
     cur = conn.cursor()
     
     # Remove columns cols from table table_name
     for col in cols:
+        if type(col) != str:
+            raise ValueError("Invalid column name: Expected <str>")
+            
         sql = f"ALTER TABLE {table_name} DROP COLUMN IF EXISTS {col};"
         cur.execute(sql)
     
@@ -248,7 +320,14 @@ def remove_cols(table_name, cols):
 # - cols - list - the names of the columns to be added to table_name
 
 def add_cols(table_name, cols):
+
+    # Check parameter types
+    if type(table_name) != str:
+        raise ValueError("Invalid table_name: Expected <str>")
     
+    if type(cols) != list:
+        raise ValueError("Invalid cols: Expected <list>")    
+
     # Get a database connection
     conn = psql.connect(f"postgres://{db_user}:{db_password}@" + db_server)
     cur = conn.cursor()
@@ -272,13 +351,26 @@ def load_ratings_data():
     # Get a database connection
     engine = create_engine(f"postgres://{db_user}:{db_password}@" + db_server)
     
+    # Initialize the number of imported rows
+    rows_imported = 0
+    
+    # get the start_time from time.time()
+    start_time = time.time()
+    
     # Read the contents for the ratings.csv file
     for data in pd.read_csv(f'{data_dir}ratings.csv', chunksize=1000000):
         
+        # log range of imported rows
+        my_logger.info(f'importing rows {rows_imported} to {rows_imported + len(data)}...', end='')
+        
         # Insert the contents into the ratings table    
         data.to_sql(name='ratings', con=engine, if_exists='append')
+        rows_imported += len(data)
     
-    
+        # add elapsed time to final print out
+        my_logger.info(f'Done. {time.time() - start_time} total seconds elapsed')
+        
+        
 # insert_data
 # ===========
 # This function uses the Pandas Dataframe method, to_sql, populate table
@@ -289,6 +381,13 @@ def load_ratings_data():
 # - df - DataFrame - dataframe whose contents will populate table table_name
 
 def insert_data(table_name,df):
+    
+    # Check parameter types
+    if type(table_name) != str:
+        raise ValueError("Invalid table_name: Expected <str>")
+    
+    if type(df) != pd.DataFrame:
+        raise ValueError("Invalid df: Expected <pandas.DataFrame>")
     
     # Get a database connection
     engine = create_engine(f"postgres://{db_user}:{db_password}@" + db_server)
@@ -311,7 +410,11 @@ def insert_data(table_name,df):
 #
 
 def load_movies_data(df):
-    
+   
+    # Check parameter types
+    if type(df) != pd.DataFrame:
+        raise ValueError("Invalid df: Expected <pandas.DataFrame>")
+   
     # Delete the contents of the movies table
     delete_from_table("movies")
     
@@ -352,12 +455,22 @@ def load_movies_data(df):
 # and ratings tables in the movie_data database. 
 #
 # Parameters
-# - wiki_movies_raw - dataframe - Wikipedia 
+# - wiki_movies_raw - list - Wikipedia movie objects
 # - kaggle_metadata - dataframe - kaggle
 # - ratings_data - dataframe - kaggle
 
 def Pipeline(wiki_movies_raw,kaggle_metadata,ratings_data):
+
+    # Check parameter types
+    if type(wiki_movies_raw) != list:
+        raise ValueError("Invalid wiki_movies_raw: Expected <pandas.DataFrame>")
     
+    if type(kaggle_metadata) != pd.DataFrame:
+        raise ValueError("Invalid kaggle_metadata: Expected <pandas.DataFrame>")
+        
+    if type(ratings_data) != pd.DataFrame:
+        raise ValueError("Invalid ratings_data: Expected <pandas.DataFrame>")
+
     ############
     #
     # Wikipedia data
@@ -400,15 +513,12 @@ def Pipeline(wiki_movies_raw,kaggle_metadata,ratings_data):
     # --------------------------
     box_office = wiki_movies_df['Box office'].dropna()
     box_office = box_office.apply(lambda x: ' '.join(x) if type(x) == list else x)
-    
-    
+        
     wiki_movies_df['box_office'] = box_office.str.extract(f'({re_dollar_amount_1}|'\
                                                           f'{re_dollar_amount_2}|'\
                                                           f'{re_dollar_amount_3})', \
                                                           flags=re.IGNORECASE)[0].apply(parse_dollars)
        
-    #for item in wiki_movies_df['box_office']:
-    #    print(f"box_office ... {item}")
     
     # Handle non-string (list) entries in wiki_movies_df['Budget']
     # --------------------------    
@@ -599,7 +709,7 @@ def Pipeline(wiki_movies_raw,kaggle_metadata,ratings_data):
     # ------------------------------------------------
     
     # Drop the wikipedia column, release_date_wiki
-    movies_df.drop("release_data_wiki", axis=1, inplace=True)
+    movies_df.drop("release_date_wiki", axis=1, inplace=True)
     
     
     # Handle Language - Drop Wikipedia
@@ -626,7 +736,7 @@ def Pipeline(wiki_movies_raw,kaggle_metadata,ratings_data):
     movies_df = movies_df[new_order]
      
      
-   # Rename the columns
+    # Rename the columns
     # ------------------
     movies_df.rename({'id':'kaggle_id',
         'title_kaggle':'title',
@@ -670,24 +780,62 @@ def Pipeline(wiki_movies_raw,kaggle_metadata,ratings_data):
     
     # Save data into DB
     # ----------------- 
-    load_movies_data(movies_df)
-    load_ratings_data()
     
-    return None
+    try:
+        load_movies_data(movies_df)
+    except OperationalError as err: # Capture and log database error
+        my_logger.error("Error loading movies table")
+        # Log the database exception
+        log_psycopg2_exception(err)
+        # Rethrow the exception
+        raise
+        
+    try:
+        load_ratings_data()
+    except OperationalError as err: # Capture and log database error
+        my_logger.error("Error loading ratings table")
+        # Log the database exception
+        log_psycopg2_exception(err)
+        # Rethrow the exception
+        raise
+    
 
 # Load the wikipedia data, the kaggle movies metadata, and the kaggle ratings
 # data into dataframes, then pass them to the Pipeline function to process 
 # them and update the movies and ratings database tables accordingly.
 
 if __name__ == "__main__":
-    # Extract the Movielens and ratings data
-    movies_metadata = pd.read_csv(f'{data_dir}movies_metadata.csv',low_memory=False)
-    ratings = pd.read_csv(f'{data_dir}ratings.csv')
+    
+    # Extract the Movielens data 
+    try:
+        movies_metadata = pd.read_csv(f'{data_dir}movies_metadata.csv',low_memory=False)
+    except:
+        e = sys.exc_info()[0]
+        my_logger.critical(e, exc_info=True)
+        sys.exit(1)
+       
+    # Extract the ratings data
+    try:
+        ratings = pd.read_csv(f'{data_dir}ratings.csv')
+    except:
+        e = sys.exc_info()[0]
+        my_logger.critical(e, exc_info=True)
+        sys.exit(1)
     
     # Extract the Wikipedia data
-    with open(f'{data_dir}/wikipedia.movies.json', mode='r') as file:
-        wiki_movies_raw = json.load(file)
-    
+    try:
+        with open(f'{data_dir}/wikipedia.movies.json', mode='r') as file:
+            wiki_movies_raw = json.load(file)
+    except:
+        e = sys.exc_info()[0]
+        my_logger.critical(e, exc_info=True)
+        sys.exit(1)
+        
+        
     # Pass the dataframes to the Pipeline function for further processing
-    Pipeline(wiki_movies_raw,movies_metadata,ratings)
-
+    try:
+        Pipeline(wiki_movies_raw,movies_metadata,ratings)
+    except:
+        e = sys.exc_info()[0]
+        my_logger.critical(e, exc_info=True)
+        sys.exit(1)
