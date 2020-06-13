@@ -348,6 +348,8 @@ def add_cols(table_name, cols):
 
 def load_ratings_data():
     
+    my_logger.info("Loading ratings table ...")
+    
     # Get a database connection
     engine = create_engine(f"postgres://{db_user}:{db_password}@" + db_server)
     
@@ -411,6 +413,8 @@ def insert_data(table_name,df):
 
 def load_movies_data(df):
    
+    my_logger.info("Loading movies table ...") 
+    
     # Check parameter types
     if type(df) != pd.DataFrame:
         raise ValueError("Invalid df: Expected <pandas.DataFrame>")
