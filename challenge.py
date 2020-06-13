@@ -7,7 +7,6 @@ import pandas as pd
 import numpy as np
 import re
 import psycopg2 as psql
-import time
 from sqlalchemy import create_engine
 
 # Load data directory from local config 
@@ -28,6 +27,18 @@ from local_config import re_date_form_4
 from config import db_user
 from config import db_password
 from local_config import db_server
+
+# clean_movie
+# ===========
+# This function consolidates all the alternate titles keys into a single
+# key whose value is a dictionary which contain the values of the other
+# columns as key-value pairs. The alternate titles items are then removed fro
+# the original dictionary. It also changes the names of some of the keys to 
+# match those in the kaggle data.
+#
+# Parameters:
+# - movie:  A dictionary of the current column from the movies table
+#
 
 def clean_movie(movie):
     
@@ -91,13 +102,24 @@ def clean_movie(movie):
     
     return movie
 
-#-------------------------------------------------
+# parse_dollars:
+# This function converts string monetary values into floats
+#
+# Parameter:
+# s - string monetary value in one of the following formats:
+#       - $###.### million
+#       - $###.### billion
+#       - $###,###,###
+# Return:
+# The float value of the passed string, eg/ 729000000.00, or NaN if the string
+# cannot be converted into a float
+
 def parse_dollars(s):
     # if s is not a string, return NaN
     if type(s) != str:
         return np.nan
 
-    # if input is of the form $###.# million
+    # if input is of the form $###.### million
     if re.match(re_dollar_amount_1, s, flags=re.IGNORECASE):
         # remove dollar sign and " million"
         s = re.sub('\$|\s|[a-zA-Z]','', s)
@@ -108,7 +130,7 @@ def parse_dollars(s):
         # return value
         return value
 
-    # if input is of the form $###.# billion
+    # if input is of the form $###.### billion
     elif re.match(re_dollar_amount_2, s, flags=re.IGNORECASE):
         # remove dollar sign and " billion"
         s = re.sub('\$|\s|[a-zA-Z]','', s)
@@ -135,117 +157,207 @@ def parse_dollars(s):
     else:
         return np.nan
 
-
+# get_table_columns
+# =================
+# This function returns a list of the names of the columns of the table
+# whose name is passed in as a parameter.
+#
+# Parameters:
+# - table_name - string - the name of the table for which a list column name is 
+#                         required.
+#
+# Return:
+# - the list of column names for table table_name
 
 def get_table_columns(table_name):
+    
+    # Get a database connection
     conn = psql.connect(f"postgres://{db_user}:{db_password}@" + db_server)
     cur = conn.cursor()
     
-    # find columns in existing table
-    sql = f"SELECT * FROM {table_name};"
-    
+    # find columns of table table_name
+    sql = f"SELECT * FROM {table_name};" 
     cur.execute(sql)
     
+    # List comprehension - use cursor description of the table to retrieve 
+    # column names
     movie_cols = [desc[0] for desc in cur.description]
     
+    # Close the cursor and the connection
     cur.close()
     conn.close()
     
     return movie_cols
 
+
+# delete_from _table
+# ==================
+# This function deletes the entire contents of the table whose name is passed
+# in as the parameter, table_name
+#
+# Paramter:
+# - table_name - string - the name of the table whose contents are to be cleared
+
 def delete_from_table(table_name):
+    
+    # Get a database connection
     conn = psql.connect(f"postgres://{db_user}:{db_password}@" + db_server)
     cur = conn.cursor()
     
-    # find columns in existing table
-    
+    # Delete the contents of table table_name
     sql = f"DELETE FROM {table_name};"
     cur.execute(sql)
     
+    # Close the cursor and the connection
     cur.close()
     conn.close()
 
+
+# remove_cols
+# ===========
+# This function drops the columns that are specified in the cols parameter
+# from table table_name
+#
+# Parameters:
+# - table_name - string - the name of the table from which to drop columns
+# - cols - list - the list of columns to be dropped
+
 def remove_cols(table_name, cols):
+    
+    # Get a database connection
     conn = psql.connect(f"postgres://{db_user}:{db_password}@" + db_server)
     cur = conn.cursor()
     
-    # find columns in existing table
-    
+    # Remove columns cols from table table_name
     for col in cols:
         sql = f"ALTER TABLE {table_name} DROP COLUMN IF EXISTS {col};"
         cur.execute(sql)
     
+    # Close the cursor and the connection
     cur.close()
     conn.close()
 
+# add_cols
+# ========
+# This function adds the columns specified in parameter, cols, to table 
+# table_name. The limitation of this function is that all added columns
+# must be of type string, varchar(30)
+#
+# Parameters
+# - table_name - string - the name of the table to which columns are added
+# - cols - list - the names of the columns to be added to table_name
+
 def add_cols(table_name, cols):
+    
+    # Get a database connection
     conn = psql.connect(f"postgres://{db_user}:{db_password}@" + db_server)
     cur = conn.cursor()
     
-    # find columns in existing table
-    
+    # Add the columns to table table_name
     for col in cols:
         sql = f"ALTER TABLE {table_name} ADD COLUMN {col} varchar(30);"
         cur.execute(sql)
     
+    # Close the cursor and the connection
     cur.close()
     conn.close()
 
-def load_ratings_data():   
+# load_ratings_data
+# =================
+# This function loads the ratings data from the ratings.csv file into the
+# the ratings table.
+
+def load_ratings_data():
+    
+    # Get a database connection
     engine = create_engine(f"postgres://{db_user}:{db_password}@" + db_server)
     
-    rows_imported = 0
-    # get the start_time from time.time()
-    
-    start_time = time.time()
+    # Read the contents for the ratings.csv file
     for data in pd.read_csv(f'{data_dir}ratings.csv', chunksize=1000000):
-        print(f'importing rows {rows_imported} to {rows_imported + len(data)}...', end='')
+        
+        # Insert the contents into the ratings table    
         data.to_sql(name='ratings', con=engine, if_exists='append')
-        rows_imported += len(data)
     
-        # add elapsed time to final print out
-        print(f'Done. {time.time() - start_time} total seconds elapsed')
+    
+# insert_data
+# ===========
+# This function uses the Pandas Dataframe method, to_sql, populate table
+# table_name with the contents of dataframe, df.
+#
+# Parameters:
+# - table_name - string - name of the table to be populated
+# - df - DataFrame - dataframe whose contents will populate table table_name
 
 def insert_data(table_name,df):
-    engine = create_engine(f"postgres://{db_user}:{db_password}@" + db_server)
-
-    df.to_sql(name=table_name, con=engine, if_exists="append")
     
+    # Get a database connection
+    engine = create_engine(f"postgres://{db_user}:{db_password}@" + db_server)
+    
+    # Append the contents of dataframe df into table table_name
+    df.to_sql(name=table_name, con=engine, if_exists="append")
+
+# load_movies_data
+# ================
+# This function accomplishes the following items:
+# - delete the contents of the passed in dataframe
+# - compares the columns in the movies table with those in the movies dataframe
+# - Adds and removes columns to the movies table as necessary
+# - Calls the insert_data function to insert the contents of the movie dataframe
+#   into the movies table
+# 
+# Parameters:
+# - df - DataFrame - the dataframe whose content is to be inserted in the movies
+#                    table
+#
+
 def load_movies_data(df):
     
+    # Delete the contents of the movies table
     delete_from_table("movies")
     
+    # Get the names of the columns in the movies table
     movie_cols = get_table_columns("movies")
+    
+    # Get the names of the columns in the movies dataframe
     df_cols = df.columns
     
+    # Determine which columns need to be removed from the movies table
     to_remove = []
     for col in movie_cols:
         if col != "index" and not col in df_cols:
             to_remove.append(col)
-            
+    
+    # Determine which columns need to be added to the movies table
     to_add = []
     for col in df_cols:
         if col not in movie_cols:
             to_add.append(col)
     
-    
+    # Remove the columns that need to be removed
     if len(to_remove) > 0:    
         remove_cols("movies", to_remove)
     
+    # Add the columns that need to be added
     if len(to_add) > 0:
         add_cols("movies", to_add)
         
+    # Insert the new data into the movies table
     insert_data("movies",df)
     
-    return None
 
-
-#-------------------------------------------------
+# Pipeline
+# ========
+# This function takes three arguments, a wikipedia dataframe, a kaggle 
+# dataframe, and a ratings dataframe, and uses them to update the movies
+# and ratings tables in the movie_data database. 
+#
+# Parameters
+# - wiki_movies_raw - dataframe - Wikipedia 
+# - kaggle_metadata - dataframe - kaggle
+# - ratings_data - dataframe - kaggle
 
 def Pipeline(wiki_movies_raw,kaggle_metadata,ratings_data):
-    # Convert the wiki_movies json data to a dataframe
-    #wiki_movies_df = pd.DataFrame(wiki_movies_raw)
-
+    
     ############
     #
     # Wikipedia data
@@ -283,8 +395,7 @@ def Pipeline(wiki_movies_raw,kaggle_metadata,ratings_data):
                             if wiki_movies_df[column].isnull().sum() < len(wiki_movies_df) * 0.9]
     wiki_movies_df = wiki_movies_df[wiki_columns_to_keep]
     
-    print(wiki_movies_df.shape)
-    
+   
     # Handle non-string (list) entries in wiki_movies_df['Box office']
     # --------------------------
     box_office = wiki_movies_df['Box office'].dropna()
@@ -324,7 +435,6 @@ def Pipeline(wiki_movies_raw,kaggle_metadata,ratings_data):
                                                 f'{re_date_form_4})')[0],\
                                                infer_datetime_format=True)
      
-    
     # Handle the Running time column
     # ------------------------------
     running_time = wiki_movies_df['Running time'].\
@@ -488,6 +598,8 @@ def Pipeline(wiki_movies_raw,kaggle_metadata,ratings_data):
     # Handle release_date_kaggle and release_date_wiki
     # ------------------------------------------------
     
+    # Drop the wikipedia column, release_date_wiki
+    movies_df.drop("release_data_wiki", axis=1, inplace=True)
     
     
     # Handle Language - Drop Wikipedia
@@ -501,12 +613,15 @@ def Pipeline(wiki_movies_raw,kaggle_metadata,ratings_data):
     # Reorder the columns (and remove the 'video' column which contains only 
     # one value)
     # --------------------
-    new_order = ['imdb_id','id','title_kaggle','original_title','tagline','belongs_to_collection','url','imdb_link',
-                       'runtime','budget_kaggle','revenue','release_date_kaggle','popularity','vote_average','vote_count',
-                       'genres','original_language','overview','spoken_languages','Country',
-                       'production_companies','production_countries','Distributor',
-                       'Producer(s)','Director','Starring','Cinematography','Editor(s)','Writer(s)','Composer(s)','Based on'
-                      ]
+    new_order = ['imdb_id','id','title_kaggle','original_title','tagline',
+                 'belongs_to_collection','url','imdb_link',
+                 'runtime','budget_kaggle','revenue','release_date_kaggle',
+                 'popularity','vote_average','vote_count','genres',
+                 'original_language','overview','spoken_languages','Country',
+                 'production_companies','production_countries','Distributor',
+                 'Producer(s)','Director','Starring','Cinematography',
+                 'Editor(s)','Writer(s)','Composer(s)','Based on'
+                ]
     
     movies_df = movies_df[new_order]
      
@@ -554,13 +669,15 @@ def Pipeline(wiki_movies_raw,kaggle_metadata,ratings_data):
     movies_with_ratings_df[rating_counts.columns] = movies_with_ratings_df[rating_counts.columns].fillna(0)
     
     # Save data into DB
-    # -----------------
-    
+    # ----------------- 
     load_movies_data(movies_df)
     load_ratings_data()
     
     return None
 
+# Load the wikipedia data, the kaggle movies metadata, and the kaggle ratings
+# data into dataframes, then pass them to the Pipeline function to process 
+# them and update the movies and ratings database tables accordingly.
 
 if __name__ == "__main__":
     # Extract the Movielens and ratings data
@@ -571,5 +688,6 @@ if __name__ == "__main__":
     with open(f'{data_dir}/wikipedia.movies.json', mode='r') as file:
         wiki_movies_raw = json.load(file)
     
+    # Pass the dataframes to the Pipeline function for further processing
     Pipeline(wiki_movies_raw,movies_metadata,ratings)
 
