@@ -361,7 +361,7 @@ def load_ratings_data():
     for data in pd.read_csv(f'{data_dir}ratings.csv', chunksize=1000000):
         
         # log range of imported rows
-        my_logger.info(f'importing rows {rows_imported} to {rows_imported + len(data)}...', end='')
+        my_logger.info(f'importing rows {rows_imported} to {rows_imported + len(data)}...')
         
         # Insert the contents into the ratings table    
         data.to_sql(name='ratings', con=engine, if_exists='append')
