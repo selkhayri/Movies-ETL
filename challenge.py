@@ -43,7 +43,7 @@ my_logger.setLevel(logging.INFO)
 # Add the log message handler to the logger
 LOG_FILENAME =  log_dir + 'log.dat'
 handler = logging.handlers.RotatingFileHandler(
-              LOG_FILENAME, maxBytes=20, backupCount=5)
+              LOG_FILENAME, maxBytes=2000, backupCount=5)
 my_logger.addHandler(handler)
 
 # print_psycopg2_exception
