@@ -353,6 +353,9 @@ def load_ratings_data():
     # Get a database connection
     engine = create_engine(f"postgres://{db_user}:{db_password}@" + db_server)
     
+    # Delete the contents of the movies table
+    delete_from_table("ratings")
+    
     # Initialize the number of imported rows
     rows_imported = 0
     
