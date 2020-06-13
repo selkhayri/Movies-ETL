@@ -52,3 +52,32 @@ The data from the ratings_df were inserted into the ratings table as follows:
 
 * the data from the existing ratings table is wiped out
 * the to_sql dataframe method is called for the ratings_df dataframe to insert the new rows into the ratings table
+
+## Error Handling
+
+<code>try-except</code> blocks were used for the following operations:
+
+* Table load operations
+* File access operations
+* The call to the Pipeline function
+
+In other places, <code>exceptions</code> were <code>raise</code>d if the following conditions occurred:
+
+* Function calls with invalid parameters
+* Casting variables to different data types
+
+## Logging
+
+Since the all the messages that were sent to the console would have to be removed from the pipeline, logging was enabled so that, in the case of faulty behaviour, log files can be used for diagnosis and troubleshooting.
+
+## Assumptions
+
+1. Any columns that need to be added to the movies table are of type <code>text/varchar(30)</code>.
+
+2. The data files are retrieved manually and placed in the data folder before the pipeline is run.
+
+3. The administrator of the pipeline has the appropriate credentials and permissions to retrieve the required data files.
+
+4. There will not be any alterations to the structures of the ratings data and the movies data which would necessitate the revision of the processing in the pipeline.
+
+5. The type of date in the ratings table is constant and, aside from wiping the table clean before each insert, no other alterations will be required. There will be no need, as in the case of the movies table, to drop columns or add columns dynamically.
