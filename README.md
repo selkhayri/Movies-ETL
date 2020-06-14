@@ -2,7 +2,7 @@
 
 ## Aim
 
-The aim of this challenge is to create a processing pipeline that automates the processing of information from three different but related sourced and to deposit the processed information into a postgresql database.
+The aim of this challenge is to create a processing pipeline that automates the processing of information from three different but related sources and to deposit the processed information into a postgresql database.
 
 ## Extract
 
@@ -24,13 +24,14 @@ The following steps were taken during processing:
     * All the null or 0-values in the column that was retained were populated with the values from the column to be discarded
     * The other column was discarded
 
-* The ratings dataframe is transformed into a pivot-table-like structure, grouping the movie id on the left and rating levels on the top. 
+* The ratings dataframe is transformed into a pivot-table-like structure, grouping the movie id on the left and rating levels on the top, named ```rating_counts```.
+* The movies_with_ratings_df dataframe is created by merging the transfromed dataframes, ```movies_df``` and ```rating_counts```, using a left-join on the column ```kaggle_id```
 
 ## Load
 
-After the data was transformed, it was loaded into the movie_data database. 
+After the data was transformed, it was loaded into the movie_data database.
 
-<u>movies table</u>
+#### movies table
 
 In order to load the data into the movies table, several steps had to be taken to prepare the table to make sure that there would be no errors during the load. 
 
@@ -40,39 +41,37 @@ The following steps were taken:
 * A comparison between the columns of movie table and the movies_df dataframe was undertaken. 
 * If a discrepancy is found:
 
-    * the columns from the movies table that are not present in the movies_df dataframe are dropped, and 
+    * the columns from the movies table that are not present in the movies_df dataframe are dropped
+
     * the columns from the movies_df that are not present in the movies table are added.
 
-<i>Assumption 1</i>: <br/>
-All the columns to be added will be text or varchar(30)
-
-<u>ratings table</u>
+#### ratings table
 
 The data from the ratings_df were inserted into the ratings table as follows:
 
-* the data from the existing ratings table is wiped out
+* the data from the existing ratings table is wiped out,
 * the to_sql dataframe method is called for the ratings_df dataframe to insert the new rows into the ratings table
 
 ## Error Handling
 
-<code>try-except</code> blocks were used for the following operations:
+```try-except``` blocks were used for the following operations:
 
 * Table load operations
 * File access operations
 * The call to the Pipeline function
 
-In other places, <code>exceptions</code> were <code>raise</code>d if the following conditions occurred:
+In other places, ```exceptions``` were ```raise```d if the following conditions occurred:
 
 * Function calls with invalid parameters
 * Casting variables to different data types
 
 ## Logging
 
-Since the all the messages that were sent to the console would have to be removed from the pipeline, logging was enabled so that, in the case of faulty behaviour, log files can be used for diagnosis and troubleshooting.
+Since all the messages that were sent to the console had to be removed from the pipeline, logging was enabled so that, in the case of faulty behaviour, log files can be used for diagnosis and troubleshooting.
 
 ## Assumptions
 
-1. Any columns that need to be added to the movies table are of type <code>text/varchar(30)</code>.
+1. Any columns that need to be added to the movies table are of type ```text/varchar(30)```.
 
 2. The data files are retrieved manually and placed in the data folder before the pipeline is run.
 
