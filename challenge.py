@@ -660,11 +660,11 @@ def Pipeline(wiki_movies_raw,kaggle_metadata,ratings_data):
     movies_df.loc[nulls_kaggle.index,"title_kaggle"] = movies_df.loc[nulls_kaggle.index,"title_wiki"]
         
     # drop the title_wiki column
-    movies_df.drop(columns=["title_wiki"])
+    movies_df.drop(columns=["title_wiki"],inplace=True)
 
     # Delete any rows with no title
     null_titles = movies_df.loc[(movies_df["title_kaggle"] == '') | (movies_df["title_kaggle"].isnull())]
-    movies_df.drop(null_titles.index,axis=0)
+    movies_df.drop(null_titles.index,axis=0,inplace=True)
 
     # Handle the running_time and runtime columns
     # -------------------------------------------
@@ -684,7 +684,7 @@ def Pipeline(wiki_movies_raw,kaggle_metadata,ratings_data):
     # Handle the budget_kaggle and budget_wiki columns
     # ------------------------------------------------
     
-    # Fill the missing values in the kaggle column, runtime, with zeroes
+    # Fill the missing values in the kaggle column, budget_kaggle, with zeroes
     movies_df.budget_kaggle.fillna(0, inplace=True)
     
     # Get the rows where budget_kaggle is 0
@@ -699,16 +699,16 @@ def Pipeline(wiki_movies_raw,kaggle_metadata,ratings_data):
     # Handle the box_office and revenue columns
     # -----------------------------------------
     
-    # Fill the missing values in the kaggle column, box_office, with zeroes
+    # Fill the missing values in the kaggle column, revenue, with zeroes
     movies_df.revenue.fillna(0, inplace=True)
     
-    # Get the rows where box_office is 0
+    # Get the rows where revenue is 0
     zeroes_revenue = movies_df.loc[movies_df.revenue == 0]
     
     # Fill in the zeroes with the values from Wikipedia data
     movies_df.loc[zeroes_revenue.index,"revenue"] = movies_df.loc[zeroes_revenue.index,"box_office"]
     
-    # Drop the wikipedia column, budget_wiki
+    # Drop the wikipedia column, box_office
     movies_df.drop("box_office",axis=1,inplace=True)
     
     
