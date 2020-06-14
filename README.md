@@ -33,24 +33,24 @@ After the data was transformed, it was loaded into the movie_data database.
 
 #### movies table
 
-In order to load the data into the movies table, several steps had to be taken to prepare the table to make sure that there would be no errors during the load. 
+In order to load the data into the movies table, several steps had to be taken to prepare the table to make sure that there would be no errors during the load.
 
 The following steps were taken:
 
 * The contents of the movie table were wiped out.
-* A comparison between the columns of movie table and the movies_df dataframe was undertaken. 
+* A comparison between the columns of movie table and the ```movies_df``` dataframe was undertaken. 
 * If a discrepancy is found:
 
-    * the columns from the movies table that are not present in the movies_df dataframe are dropped
+    * the columns from the movies table that are not present in the ```movies_df``` dataframe are dropped
 
-    * the columns from the movies_df that are not present in the movies table are added.
+    * the columns from the ```movies_df``` that are not present in the movies table are added.
 
 #### ratings table
 
 The data from the ratings_df were inserted into the ratings table as follows:
 
 * the data from the existing ratings table is wiped out,
-* the to_sql dataframe method is called for the ratings_df dataframe to insert the new rows into the ratings table
+* the ```to_sql``` dataframe method is called for the ```ratings_df``` dataframe to insert the new rows into the ```ratings``` table
 
 ## Error Handling
 
