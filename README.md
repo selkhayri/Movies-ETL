@@ -2,11 +2,11 @@
 
 ## Aim
 
-The aim of this challenge is to create a processing pipeline that automates the processing of information from three different but related sources and to deposit the processed information into a postgresql database.
+The aim of this project is to create a processing pipeline that automates the processing of information from three different but related sources and to deposit the processed information into a postgresql database.
 
 ## Extract
 
-The data for this challenge is the following:
+The data for this project is the following:
 
 * Kaggle metadata (CSV)
 * MovieLens ratings data (from Kaggle) (CSV)
