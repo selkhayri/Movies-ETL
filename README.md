@@ -2,7 +2,7 @@
 
 ## Aim
 
-The aim of this project is to create a processing pipeline that automates the processing of information from three different but related sources and to deposit the processed information into a postgresql database.
+The aim of this project is to create a processing pipeline that automates the processing of information from three different but related sources and to deposit the processed information into a PostgreSQL database.
 
 ## Extract
 
