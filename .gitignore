@@ -4,3 +4,7 @@
 # spyder projects
 .spyproject
 
+# __pycache__
+__pycache__
+
+
